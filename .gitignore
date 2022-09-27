@@ -1,0 +1,6 @@
+bios/
+out/
+__pycache__
+*.so
+*.dylib
+*.dll
