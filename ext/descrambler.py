@@ -1,48 +1,70 @@
-import pexpect
-import ziglang
+import cslug
+
+import sys
 import os
 
-# import distutils
 import platform
 import ctypes
 
-systems_extensions = {
-    "Windows": ".dll",
-    "Darwin": ".dylib",
-    "Linux": ".so",
-}
+script_template = """
+#!/bin/sh
+{0} cc $@
+""".lstrip()
 
 plat = platform.uname()
 system = plat.system
-
-system_extension = systems_extensions[system]
 
 class Descrambler():
     DECRYPT_START_OFFSET = 0x100
     CODE_START_OFFSET = 0x820
 
     def __init__(self) -> None:
-        zig = os.path.join(os.path.dirname(ziglang.__file__), "zig")
+        ext_path = os.path.abspath(__file__)
+        ext_dir = os.path.dirname(ext_path)
 
-        script_path = os.path.abspath(__file__)
-        script_dir = os.path.dirname(script_path)
+        source = os.path.join(ext_dir, "descrambler.c")
+        slug = cslug.CSlug(source)
+        if not os.path.exists(slug.path):
+            if system == "Windows":
+                import io
+                import zipfile
+                import tempfile
+                import urllib.request
 
-        # compiler = distutils.ccompiler.new_compiler()
-        # output = "libdescrambler" + compiler.shared_lib_extension
-        output = "libdescrambler" + system_extension
+                path = tempfile.TemporaryDirectory()
+                url = "https://nongnu.askapache.com/tinycc/tcc-0.9.27-win64-bin.zip"
+                r = urllib.request.Request(url)
+                r.add_header("user-agent", "curl/7.86.0")
 
-        lib_path = os.path.join(script_dir, output)
+                with urllib.request.urlopen(r) as f:
+                    zip_data = io.BytesIO(f.read())
 
-        if not os.path.exists(lib_path):
-            pexpect.run(f'{zig} cc -shared -o {output} descrambler.c', cwd=script_dir, withexitstatus=True)
+                zip_ref = zipfile.ZipFile(zip_data)
+                zip_ref.extractall(path.name)
 
-        descrambler_lib = ctypes.CDLL(lib_path)
+                cc_path = os.path.join(path.name, "tcc", "tcc.exe")
+            else:
+                import ziglang
+                zig_path = os.path.join(os.path.dirname(ziglang.__file__), "zig")
 
-        descrambler = descrambler_lib.Descrambler 
-        descrambler.argtypes = [ctypes.c_char_p, ctypes.c_uint32]
-        descrambler.restype = ctypes.c_uint32
+                cc_path = os.path.join(ext_dir, "zcc")
+                if not os.path.exists(cc_path):
+                    script = script_template.format(zig_path)
+                    with open(cc_path, 'w') as f:
+                        f.write(script)
+                    mode = os.stat(cc_path).st_mode
+                    mode |= 0o111
+                    os.chmod(cc_path, mode)
 
-        self.descrambler = descrambler
+            os.environ['CC'] = cc_path
+
+        dll = slug.dll
+        if system == "Windows":
+            args = dll.Descrambler.argtypes
+            dll = ctypes.WinDLL(str(slug.path))
+            dll.argtypes = args
+
+        self.descrambler = slug.dll.Descrambler
 
     def _get_code_end(self, data) -> int:
         stride_size = 0x20
@@ -70,8 +92,6 @@ class Descrambler():
         return data[start:]
 
 if __name__ == "__main__":
-    import sys
-
     filename = "ipl.bin"
     if len(sys.argv) > 1:
         filename = sys.argv[1]

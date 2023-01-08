@@ -1,6 +1,11 @@
 bios/
 out/
+*.bin
+*.dol
 __pycache__
 *.so
 *.dylib
 *.dll
+*.def
+ext/zcc
+ext/descrambler.json

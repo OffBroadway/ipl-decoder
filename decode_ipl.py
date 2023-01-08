@@ -1,4 +1,10 @@
 import sys
+import platform
+
+plat = platform.uname()
+system = plat.system
+if system == "Windows":
+    sys.path.append('.')
 
 from gcn.dol import *
 from ext.descrambler import Descrambler

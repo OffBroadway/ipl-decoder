@@ -1,3 +1,2 @@
-pexpect>=4.8.0
-ptyprocess>=0.7.0
-ziglang>=0.0.0
+ziglang>=0.0.0; platform_system == 'Linux' or platform_system == 'Darwin'
+cslug==0.7.0
